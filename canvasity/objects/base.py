@@ -69,8 +69,9 @@ class BoardItem(QGraphicsObject):
         return item.boundingRect()
 
     def set_size(self, width: float, height: float) -> None:
-        width = max(MIN_ITEM_SIZE, float(width))
-        height = max(MIN_ITEM_SIZE, float(height))
+        min_width, min_height = self.min_size()
+        width = max(min_width, float(width))
+        height = max(min_height, float(height))
         if abs(width - self._w) < 1e-6 and abs(height - self._h) < 1e-6:
             return
         self.prepareGeometryChange()
@@ -78,6 +79,10 @@ class BoardItem(QGraphicsObject):
         self._h = height
         self.setTransformOriginPoint(self.rect().center())
         self.update()
+
+    def min_size(self) -> tuple[float, float]:
+        """Minimum supported size for this item, in local coordinates."""
+        return (float(MIN_ITEM_SIZE), float(MIN_ITEM_SIZE))
 
     def boundingRect(self) -> QRectF:
         m = self._margin
@@ -321,23 +326,24 @@ class BoardItem(QGraphicsObject):
         delta = local - self._start_local
         w0 = self._start_rect.width()
         h0 = self._start_rect.height()
+        min_width, min_height = self.min_size()
         dx = 0.0
         dy = 0.0
         if self.RESIZE_AXES in ("xy", "x"):
             if "e" in handle:
-                dx = max(delta.x(), MIN_ITEM_SIZE - w0)
+                dx = max(delta.x(), min_width - w0)
             elif "w" in handle:
-                dx = min(delta.x(), w0 - MIN_ITEM_SIZE)
+                dx = min(delta.x(), w0 - min_width)
         if self.RESIZE_AXES == "xy":
             if "s" in handle:
-                dy = max(delta.y(), MIN_ITEM_SIZE - h0)
+                dy = max(delta.y(), min_height - h0)
             elif "n" in handle:
-                dy = min(delta.y(), h0 - MIN_ITEM_SIZE)
+                dy = min(delta.y(), h0 - min_height)
 
         new_w = w0 + dx if "e" in handle else w0 - dx if "w" in handle else w0
         new_h = h0 + dy if "s" in handle else h0 - dy if "n" in handle else h0
-        new_w = max(MIN_ITEM_SIZE, new_w)
-        new_h = max(MIN_ITEM_SIZE, new_h)
+        new_w = max(min_width, new_w)
+        new_h = max(min_height, new_h)
 
         # Keep the opposite edge/corner fixed in scene space, accounting for rotation.
         ax = 0.0 if "e" in handle else w0 if "w" in handle else w0 / 2.0

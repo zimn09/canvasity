@@ -380,6 +380,28 @@ class ManipulationTests(CanvasTestCase):
         self.assertAlmostEqual(restored["x"], 0.0, places=3)
         self.assertAlmostEqual(restored["y"], 0.0, places=3)
 
+    def test_project_resize_handle_and_undo(self) -> None:
+        item = ProjectItem(
+            560,
+            "Project",
+            [{"id": "todo-1", "text": "Plan", "done": False, "x": 0, "y": 0}],
+            [],
+        )
+        item.setPos(-280, -120)
+        self.scene.add_items([item], "test")
+        item.setSelected(True)
+        app().processEvents()
+        start_size = (item.rect().width(), item.rect().height())
+        handle = item.mapToScene(QPointF(start_size[0], start_size[1]))
+        start = viewport_point(self.view, handle)
+        drag(self.view, start, start + QPoint(80, 40))
+        app().processEvents()
+        self.assertGreater(item.rect().width(), start_size[0] + 20)
+        self.assertGreater(item.rect().height(), start_size[1] + 10)
+        self.scene.undo_stack.undo()
+        self.assertAlmostEqual(item.rect().width(), start_size[0], places=2)
+        self.assertAlmostEqual(item.rect().height(), start_size[1], places=2)
+
     def test_resize_handle_and_undo(self) -> None:
         rect = self.add_rect(0, 0)
         rect.setSelected(True)

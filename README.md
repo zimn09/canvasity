@@ -15,8 +15,8 @@ cloud services, telemetry, or network access.
 - Interactive checklist cards with checkboxes, add/delete/edit task actions,
   progress bars, and per-action undo/redo.
 - Project todo graphs with compact checkable todo nodes, dependency arrows,
-  progress roll-up, auto-sizing frames, and undoable add/connect/delete
-  actions.
+  progress roll-up, auto-sizing frames, frame resizing, and undoable
+  add/connect/delete actions.
 - Move, resize, rotate, delete, duplicate, copy/paste, multi-select, group,
   and z-order controls.
 - Undo/redo, keyboard shortcuts, colour pickers, pen width, text formatting
@@ -137,11 +137,11 @@ QT_QPA_PLATFORM=offscreen python -m unittest discover -s tests -v
   added.
 - Checklist cards support checkboxes, task add/edit/delete, and progress. Task
   text is single-line; long text is elided on the card.
-- Project graphs grow automatically as todos are added or moved and do not
-  have resize handles. Drag a todo body to arrange it, drag its right-edge
-  circle onto another todo to add a dependency arrow, and hover a link to
-  reveal its remove button. Project titles and todo text are single-line; long
-  text is elided on the node.
+- Project graphs grow automatically as todos are added or moved, and you can
+  resize the frame with selection handles. Drag a todo body to arrange it, drag
+  its right-edge circle onto another todo to add a dependency arrow, and hover
+  a link to reveal its remove button. Project titles and todo text are
+  single-line; long text is elided on the node.
 - Groups move, copy, delete, and reorder as a unit; resizing is done per item.
 - Renaming a board changes its display name inside the file, not the filename.
 - When switching themes, items that still use the previous theme's default

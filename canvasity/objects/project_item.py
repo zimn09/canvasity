@@ -54,7 +54,7 @@ class ProjectItem(BoardItem):
     TYPE = "project"
     SUPPORTS_FILL = True
     SUPPORTS_TEXT = True
-    RESIZE_AXES = ""
+    RESIZE_AXES = "xy"
     ROTATABLE = True
 
     def __init__(
@@ -100,7 +100,7 @@ class ProjectItem(BoardItem):
         option.setWrapMode(QTextOption.WrapMode.WrapAtWordBoundaryOrAnywhere)
         self._editor.document().setDefaultTextOption(option)
 
-        self._fit_size()
+        self._fit_initial_size()
 
     # ------------------------------------------------------------------ data
     @staticmethod
@@ -200,7 +200,7 @@ class ProjectItem(BoardItem):
                 "y": max(0.0, float(y)),
             }
         )
-        self._fit_size()
+        self._grow_to_fit()
         self.update()
         return node_id
 
@@ -217,7 +217,7 @@ class ProjectItem(BoardItem):
             if link["from"] != node_id and link["to"] != node_id
         ]
         self._hover_link = None
-        self._fit_size()
+        self._grow_to_fit()
         self.update()
 
     def set_node_text(self, node_id: str, text: str) -> None:
@@ -363,7 +363,7 @@ class ProjectItem(BoardItem):
         )
 
     def _footer_top(self) -> float:
-        return HEADER_HEIGHT + self._content_height(self._visible_nodes())
+        return self._h - FOOTER_HEIGHT
 
     def _add_rect(self) -> QRectF:
         return QRectF(
@@ -445,29 +445,56 @@ class ProjectItem(BoardItem):
         nodes = self._state_nodes()
         return self._width_for_nodes(nodes), self._height_for_nodes(nodes)
 
-    def _fit_size(self) -> None:
+    def _fit_initial_size(self) -> None:
         nodes = self._visible_nodes()
         super().set_size(
             self._width_for_nodes(nodes),
             self._height_for_nodes(nodes),
         )
 
+    def _content_min_size(
+        self, nodes: list[dict[str, Any]] | None = None
+    ) -> tuple[float, float]:
+        if nodes is None:
+            nodes = self._visible_nodes()
+        min_width = max(MIN_WIDTH, self._node_extent(nodes)[0] + CONTENT_PADDING * 2.0)
+        min_height = self._height_for_nodes(nodes)
+        return min_width, min_height
+
+    def min_size(self) -> tuple[float, float]:
+        return self._content_min_size()
+
     def _grow_to_fit(self) -> None:
-        nodes = self._visible_nodes()
-        width = max(self._w, self._width_for_nodes(nodes))
-        height = max(self._h, self._height_for_nodes(nodes))
-        if abs(width - self._w) > 1e-6 or abs(height - self._h) > 1e-6:
-            super().set_size(width, height)
+        min_width, min_height = self._content_min_size()
+        super().set_size(
+            max(self._w, min_width),
+            max(self._h, min_height),
+        )
 
     def set_size(self, width: float, height: float) -> None:
+        min_width, min_height = self.min_size()
         super().set_size(
-            max(MIN_WIDTH, float(width)),
-            max(MIN_HEIGHT, float(height)),
+            max(min_width, float(width)),
+            max(min_height, float(height)),
         )
 
     def capture_state(self) -> dict[str, Any]:
         state = super().capture_state()
-        state["size"] = list(self._state_size())
+        content_size = self._state_size()
+        if (
+            self._editing_new
+            and self._draft_id is not None
+            and not self._editor_value()
+        ):
+            if (
+                abs(self._w - content_size[0]) > 1e-6
+                or abs(self._h - content_size[1]) > 1e-6
+            ):
+                state["size"] = [self._w, self._h]
+            else:
+                state["size"] = list(content_size)
+        else:
+            state["size"] = [self._w, self._h]
         return state
 
     def _find_free_slot(self) -> QPointF:
@@ -702,7 +729,7 @@ class ProjectItem(BoardItem):
             CONTENT_PADDING,
             HEADER_HEIGHT,
             self._w - CONTENT_PADDING * 2.0,
-            self._content_height([]),
+            self._footer_top() - HEADER_HEIGHT,
         )
         painter.setFont(self._node_font())
         painter.setPen(self._muted(145))
@@ -1039,7 +1066,7 @@ class ProjectItem(BoardItem):
         while any(node["id"] == self._draft_id for node in self._nodes):
             self._draft_id = uuid.uuid4().hex
         self._draft_pos = self._find_free_slot()
-        self._fit_size()
+        self._grow_to_fit()
         draft = {
             "id": self._draft_id,
             "text": "",
@@ -1066,7 +1093,7 @@ class ProjectItem(BoardItem):
         self._editor.setAcceptedMouseButtons(Qt.MouseButton.NoButton)
         self._editor.setVisible(False)
         self._editor.clearFocus()
-        self._fit_size()
+        self._grow_to_fit()
 
     def finish_edit(self) -> None:
         if not self._is_editing():
@@ -1103,7 +1130,7 @@ class ProjectItem(BoardItem):
         self._editor.setAcceptedMouseButtons(Qt.MouseButton.NoButton)
         self._editor.setVisible(False)
         self._editor.clearFocus()
-        self._fit_size()
+        self._grow_to_fit()
         self.update()
 
         scene = self.scene()
@@ -1213,7 +1240,7 @@ class ProjectItem(BoardItem):
         if self._drag_node_id is not None:
             self._drag_node_id = None
             self._interactive_press = False
-            self._fit_size()
+            self._grow_to_fit()
             self.update()
             event.accept()
             return
@@ -1342,7 +1369,7 @@ class ProjectItem(BoardItem):
                 8.0, min(MAX_FONT_SIZE, float(state["font_size"]))
             )
         self._hover_link = None
-        self._fit_size()
+        self._grow_to_fit()
         self.update()
 
     def _extra_dict(self) -> dict[str, Any]:
