@@ -25,6 +25,7 @@ from canvasity.objects import (
     EllipseItem,
     ImageItem,
     LineItem,
+    ProjectItem,
     RectItem,
     StickyItem,
     StrokeItem,
@@ -219,6 +220,128 @@ class ToolTests(CanvasTestCase):
         self.scene.undo_stack.undo()
         self.assertEqual(item.total_count, 2)
 
+    def test_project_tool_builds_todo_graph(self) -> None:
+        self.view.set_tool("project")
+        click(self.view, QPoint(300, 250))
+        items = self.scene.board_items()
+        self.assertEqual(len(items), 1)
+        item = items[0]
+        self.assertIsInstance(item, ProjectItem)
+        self.assertTrue(item.is_editing())
+        self.assertTrue(self.scene.is_editing())
+
+        self.view.setFocus()
+        app().processEvents()
+        QTest.keyClicks(self.view, "Plan launch")
+        QTest.keyClick(self.view, Qt.Key.Key_Escape)
+        app().processEvents()
+        self.assertEqual(item.total_count, 1)
+        self.assertEqual(item.nodes[0]["text"], "Plan launch")
+        self.view.fit_to_content()
+        app().processEvents()
+
+        add = viewport_point(self.view, item.mapToScene(item._add_rect().center()))
+        click(self.view, add)
+        app().processEvents()
+        self.assertTrue(item.is_editing())
+        self.view.setFocus()
+        app().processEvents()
+        QTest.keyClicks(self.view, "Ship it")
+        QTest.keyClick(self.view, Qt.Key.Key_Escape)
+        app().processEvents()
+        self.assertEqual(item.total_count, 2)
+        self.assertEqual(item.nodes[1]["text"], "Ship it")
+
+        first, second = item.nodes
+        start = viewport_point(
+            self.view, item.mapToScene(item._connector_center(first))
+        )
+        end = viewport_point(
+            self.view, item.mapToScene(item._node_rect(second).center())
+        )
+        drag(self.view, start, end)
+        app().processEvents()
+        self.assertEqual(item.links, [{"from": first["id"], "to": second["id"]}])
+        self.scene.undo_stack.undo()
+        self.assertEqual(item.links, [])
+        self.scene.undo_stack.redo()
+        self.assertEqual(item.links, [{"from": first["id"], "to": second["id"]}])
+
+        checkbox = viewport_point(
+            self.view, item.mapToScene(item._checkbox_rect(first).center())
+        )
+        click(self.view, checkbox)
+        app().processEvents()
+        self.assertTrue(item.nodes[0]["done"])
+        self.assertEqual(item.done_count, 1)
+        self.scene.undo_stack.undo()
+        self.assertFalse(item.nodes[0]["done"])
+
+        midpoint = viewport_point(
+            self.view, item.mapToScene(item._link_midpoint(0))
+        )
+        QTest.mouseMove(self.view.viewport(), midpoint)
+        app().processEvents()
+        self.assertEqual(item._hover_link, 0)
+        click(self.view, midpoint)
+        app().processEvents()
+        self.assertEqual(item.links, [])
+        self.scene.undo_stack.undo()
+        self.assertEqual(len(item.links), 1)
+
+        delete = viewport_point(
+            self.view, item.mapToScene(item._node_delete_rect(first).center())
+        )
+        click(self.view, delete)
+        app().processEvents()
+        self.assertEqual(item.total_count, 1)
+        self.assertEqual(item.links, [])
+        self.scene.undo_stack.undo()
+        self.assertEqual(item.total_count, 2)
+        self.assertEqual(len(item.links), 1)
+
+    def test_project_title_and_todo_editing(self) -> None:
+        item = ProjectItem(
+            560,
+            "Project",
+            [{"id": "todo-1", "text": "Plan", "done": False, "x": 0, "y": 0}],
+            [],
+        )
+        item.setPos(-280, -120)
+        self.scene.add_items([item], "test")
+        item.setSelected(True)
+        app().processEvents()
+
+        title = viewport_point(
+            self.view, item.mapToScene(item._title_text_rect().center())
+        )
+        QTest.mouseDClick(self.view.viewport(), Qt.MouseButton.LeftButton, pos=title)
+        app().processEvents()
+        self.assertTrue(item.is_editing())
+        self.view.setFocus()
+        app().processEvents()
+        QTest.keyClicks(self.view, "Launch plan")
+        QTest.keyClick(self.view, Qt.Key.Key_Escape)
+        app().processEvents()
+        self.assertEqual(item.title, "Launch plan")
+        self.scene.undo_stack.undo()
+        self.assertEqual(item.title, "Project")
+
+        todo = viewport_point(
+            self.view, item.mapToScene(item._node_text_rect(item.nodes[0]).center())
+        )
+        QTest.mouseDClick(self.view.viewport(), Qt.MouseButton.LeftButton, pos=todo)
+        app().processEvents()
+        self.assertTrue(item.is_editing())
+        self.view.setFocus()
+        app().processEvents()
+        QTest.keyClicks(self.view, "Write the plan")
+        QTest.keyClick(self.view, Qt.Key.Key_Escape)
+        app().processEvents()
+        self.assertEqual(item.nodes[0]["text"], "Write the plan")
+        self.scene.undo_stack.undo()
+        self.assertEqual(item.nodes[0]["text"], "Plan")
+
 
 class ManipulationTests(CanvasTestCase):
     def test_move_item_with_mouse_and_undo(self) -> None:
@@ -232,6 +355,30 @@ class ManipulationTests(CanvasTestCase):
         self.scene.undo_stack.undo()
         self.assertAlmostEqual(rect.pos().x(), 0.0, places=3)
         self.assertAlmostEqual(rect.pos().y(), 0.0, places=3)
+
+    def test_project_node_drag_and_undo(self) -> None:
+        item = ProjectItem(
+            560,
+            "Project",
+            [{"id": "todo-1", "text": "Plan", "done": False, "x": 0, "y": 0}],
+            [],
+        )
+        item.setPos(-280, -120)
+        self.scene.add_items([item], "test")
+        item.setSelected(True)
+        app().processEvents()
+        center = viewport_point(
+            self.view, item.mapToScene(item._node_rect(item.nodes[0]).center())
+        )
+        drag(self.view, center, center + QPoint(60, 40))
+        app().processEvents()
+        moved = item.nodes[0]
+        self.assertGreater(moved["x"], 0.0)
+        self.assertGreater(moved["y"], 0.0)
+        self.scene.undo_stack.undo()
+        restored = item.nodes[0]
+        self.assertAlmostEqual(restored["x"], 0.0, places=3)
+        self.assertAlmostEqual(restored["y"], 0.0, places=3)
 
     def test_resize_handle_and_undo(self) -> None:
         rect = self.add_rect(0, 0)
@@ -395,16 +542,27 @@ class SerializationTests(CanvasTestCase):
         )
         checklist.setPos(800, 300)
         self.scene.add_items([checklist])
+        project = ProjectItem(
+            560,
+            "Roadmap",
+            [
+                {"id": "p1", "text": "Plan", "done": True, "x": 0, "y": 0},
+                {"id": "p2", "text": "Build", "done": False, "x": 276, "y": 0},
+            ],
+            [{"from": "p1", "to": "p2"}],
+        )
+        project.setPos(100, 500)
+        self.scene.add_items([project])
 
     def test_round_trip_all_types(self) -> None:
         self._populate()
         data = self.scene.to_board_dict()
         self.assertEqual(data["format"], BOARD_FORMAT)
-        self.assertEqual(len(data["items"]), 8)
+        self.assertEqual(len(data["items"]), 9)
         self.scene.new_board()
         self.assertEqual(len(self.scene.board_items()), 0)
         self.scene.load_board_dict(data)
-        self.assertEqual(len(self.scene.board_items()), 8)
+        self.assertEqual(len(self.scene.board_items()), 9)
         types = sorted(item.TYPE for item in self.scene.board_items())
         self.assertEqual(
             sorted(types),
@@ -414,6 +572,7 @@ class SerializationTests(CanvasTestCase):
                     "checklist",
                     "image",
                     "line",
+                    "project",
                     "rect",
                     "sticky",
                     "stroke",
@@ -441,6 +600,28 @@ class SerializationTests(CanvasTestCase):
         self.assertEqual(clone.done_count, 1)
         self.assertEqual(clone.tasks[0]["text"], "Milk")
         self.assertTrue(clone.tasks[0]["done"])
+
+    def test_project_round_trip(self) -> None:
+        item = ProjectItem(
+            560,
+            "Roadmap",
+            [
+                {"id": "p1", "text": "Plan", "done": True, "x": 0, "y": 0},
+                {"id": "p2", "text": "Build", "done": False, "x": 276, "y": 0},
+            ],
+            [{"from": "p1", "to": "p2"}],
+            "#f8fafc",
+            "#0f172a",
+            15,
+        )
+        clone = item_from_dict(item.to_dict())
+        self.assertIsInstance(clone, ProjectItem)
+        self.assertEqual(clone.title, "Roadmap")
+        self.assertEqual(clone.total_count, 2)
+        self.assertEqual(clone.done_count, 1)
+        self.assertEqual(clone.nodes[0]["text"], "Plan")
+        self.assertEqual(clone.links, [{"from": "p1", "to": "p2"}])
+        self.assertEqual(clone.font_size, 15)
 
     def test_item_dict_round_trip(self) -> None:
         rect = RectItem(90, 60, "#ff0000", "#00ff00", 4)

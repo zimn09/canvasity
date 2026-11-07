@@ -10,6 +10,7 @@ from ..config import DEFAULT_FILL, DEFAULT_STROKE, DEFAULT_TEXT
 from .base import BoardItem
 from .checklist_item import ChecklistItem
 from .image_item import ImageItem, decode_image
+from .project_item import ProjectItem
 from .shape_item import ArrowItem, EllipseItem, LineItem, RectItem, ShapeItem
 from .sticky_item import StickyItem
 from .stroke_item import StrokeItem
@@ -23,6 +24,7 @@ ITEM_TYPES: dict[str, type[BoardItem]] = {
     "sticky": StickyItem,
     "text": TextItem,
     "checklist": ChecklistItem,
+    "project": ProjectItem,
     "stroke": StrokeItem,
     "image": ImageItem,
 }
@@ -93,6 +95,16 @@ def item_from_dict(data: dict[str, Any]) -> BoardItem:
             data.get("text_color", DEFAULT_TEXT),
             float(data.get("font_size", 14.0)),
         )
+    elif kind == "project":
+        item = ProjectItem(
+            width,
+            data.get("title", "Project"),
+            data.get("nodes", []),
+            data.get("links", []),
+            data.get("fill", DEFAULT_FILL),
+            data.get("text_color", DEFAULT_TEXT),
+            float(data.get("font_size", 14.0)),
+        )
     elif kind == "stroke":
         points = [tuple(float(v) for v in p) for p in data.get("points", [])]
         item = StrokeItem(
@@ -127,6 +139,7 @@ __all__ = [
     "StickyItem",
     "TextItem",
     "ChecklistItem",
+    "ProjectItem",
     "StrokeItem",
     "ImageItem",
     "ITEM_TYPES",

@@ -34,6 +34,12 @@ PATHS: dict[str, str] = {
         '<path d="m7.5 9 1.6 1.6L12 7.8"/><path d="M14.5 9.5h2.5"/>'
         '<path d="m7.5 15 1.6 1.6L12 13.8"/><path d="M14.5 15.5h2.5"/>'
     ),
+    "project": (
+        '<rect x="3" y="4" width="18" height="16" rx="2"/>'
+        '<circle cx="7.5" cy="9" r="1.6"/><circle cx="16.5" cy="9" r="1.6"/>'
+        '<circle cx="12" cy="16" r="1.6"/>'
+        '<path d="M9.1 9h5.8M8.5 10.4l2.5 4.1M15.5 10.4 13 14.5"/>'
+    ),
     "rect": '<rect x="4" y="5" width="16" height="14" rx="1.5"/>',
     "ellipse": '<ellipse cx="12" cy="12" rx="8" ry="7"/>',
     "line": (

@@ -10,10 +10,13 @@ cloud services, telemetry, or network access.
 
 - Infinite pan-and-zoom canvas with a grid, fit-to-screen, and cursor-anchored
   wheel zoom.
-- Select, pen, eraser, sticky note, text, to-do checklist, rectangle, ellipse,
-  line, arrow, and image tools.
+- Select, pen, eraser, sticky note, text, to-do checklist, project graph,
+  rectangle, ellipse, line, arrow, and image tools.
 - Interactive checklist cards with checkboxes, add/delete/edit task actions,
   progress bars, and per-action undo/redo.
+- Project todo graphs with compact checkable todo nodes, dependency arrows,
+  progress roll-up, auto-sizing frames, and undoable add/connect/delete
+  actions.
 - Move, resize, rotate, delete, duplicate, copy/paste, multi-select, group,
   and z-order controls.
 - Undo/redo, keyboard shortcuts, colour pickers, pen width, text formatting
@@ -57,7 +60,7 @@ python main.py path/to/board.canvasity
 | Action | Shortcut |
 | --- | --- |
 | Select / Pen / Eraser | `V` / `P` / `E` |
-| Sticky / Text / Checklist | `S` / `T` / `C` |
+| Sticky / Text / Checklist / Project graph | `S` / `T` / `C` / `G` |
 | Rectangle / Ellipse / Line / Arrow | `R` / `O` / `L` / `A` |
 | Insert image | `I` |
 | Pan | Middle-drag or `Space` + drag |
@@ -105,7 +108,7 @@ canvasity/
   config.py              constants, defaults, paths
   theme.py               light/dark palettes and stylesheet
   canvas/                scene, view, undo commands
-  objects/               board item types, checklist cards and inline editors
+  objects/               board items, checklists, project graphs, inline editors
   tools/                 one class per tool
   storage/               atomic JSON load/save and autosave helpers
   export/                PNG and PDF rendering
@@ -134,6 +137,11 @@ QT_QPA_PLATFORM=offscreen python -m unittest discover -s tests -v
   added.
 - Checklist cards support checkboxes, task add/edit/delete, and progress. Task
   text is single-line; long text is elided on the card.
+- Project graphs grow automatically as todos are added or moved and do not
+  have resize handles. Drag a todo body to arrange it, drag its right-edge
+  circle onto another todo to add a dependency arrow, and hover a link to
+  reveal its remove button. Project titles and todo text are single-line; long
+  text is elided on the node.
 - Groups move, copy, delete, and reorder as a unit; resizing is done per item.
 - Renaming a board changes its display name inside the file, not the filename.
 - When switching themes, items that still use the previous theme's default

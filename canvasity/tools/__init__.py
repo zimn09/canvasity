@@ -10,6 +10,7 @@ from .drawing import EraserTool, PenTool
 from .image_tool import ImageTool
 from .lines import ArrowTool, LineTool
 from .notes import StickyTool, TextTool
+from .project import ProjectTool
 from .select import SelectTool
 from .shapes import EllipseTool, RectTool
 
@@ -20,6 +21,7 @@ TOOL_CLASSES: dict[str, type[BaseTool]] = {
     "sticky": StickyTool,
     "text": TextTool,
     "checklist": ChecklistTool,
+    "project": ProjectTool,
     "rect": RectTool,
     "ellipse": EllipseTool,
     "line": LineTool,
