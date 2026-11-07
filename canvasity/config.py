@@ -8,7 +8,7 @@ from PySide6.QtCore import QStandardPaths
 
 APP_NAME = "Canvasity"
 APP_ORG = "Canvasity"
-APP_VERSION = "0.3.0"
+APP_VERSION = "0.4.0"
 
 BOARD_EXTENSION = ".canvasity"
 BOARD_FORMAT = "canvasity"
@@ -27,6 +27,10 @@ NUDGE_STEP_LARGE = 10.0
 MIN_ITEM_SIZE = 8.0
 SNAP_THRESHOLD_PX = 7.0
 AUTOSAVE_INTERVAL_MS = 30_000
+
+COLLABORATION_HOST = "0.0.0.0"
+COLLABORATION_PORT = 8765
+COLLABORATION_LOCAL_HOST = "127.0.0.1"
 
 IMAGE_EXTENSIONS = {".png", ".jpg", ".jpeg", ".bmp", ".gif", ".webp", ".tif", ".tiff"}
 

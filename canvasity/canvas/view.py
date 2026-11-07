@@ -28,6 +28,7 @@ class BoardView(QGraphicsView):
     zoom_changed = Signal(float)
     tool_changed = Signal(str)
     error_occurred = Signal(str)
+    cursor_moved = Signal(QPointF)
 
     TOOL_KEYS = {
         Qt.Key.Key_V: "select",
@@ -215,6 +216,8 @@ class BoardView(QGraphicsView):
         super().mousePressEvent(event)
 
     def mouseMoveEvent(self, event: Any) -> None:
+        if not self._panning:
+            self.cursor_moved.emit(self.mapToScene(event.position().toPoint()))
         if self._panning:
             self._pan_to(event.position())
             event.accept()

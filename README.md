@@ -2,7 +2,8 @@
 
 Canvasity is a local, infinite-canvas whiteboard for the desktop. It is built
 with Python 3 and PySide6 and stores everything on your machine — no accounts,
-cloud services, telemetry, or network access.
+cloud services, telemetry, or cloud relay. Live collaboration uses a small local
+TCP relay, so no hosted multiplayer service is involved.
 
 ![Canvasity](canvasity/assets/icons/logo.svg)
 
@@ -24,6 +25,8 @@ cloud services, telemetry, or network access.
   or to other objects.
 - Board lifecycle: new, open, save, save as, rename, 30-second autosave,
   crash recovery, and PNG/PDF export.
+- Live collaboration over a local TCP relay: start or join a session, see
+  remote cursors, and sync board updates.
 - Light and dark themes, plus a top toolbar, left tool palette, contextual
   properties panel, and zoom/selection status bar.
 
@@ -78,6 +81,38 @@ python main.py path/to/board.canvasity
 While editing text, normal text-editing keys (including `Ctrl+Z` and `Ctrl+V`)
 apply to the editor instead of the canvas.
 
+## Live collaboration
+
+Canvasity supports live collaboration without a hosted relay. The local relay
+listens on `0.0.0.0:8765` and exchanges newline-delimited JSON messages:
+
+- `hello` carries the joining client’s user details and board snapshot.
+- `board` carries a full board snapshot from one client to the others.
+- `cursor` carries cursor movement from one client to the others.
+
+Board updates are full-snapshot updates, which keeps the protocol simple while
+still allowing every participant to add to or modify the shared board.
+
+### Starting and joining a session
+
+- Start the collaboration server from the `View` menu. The app starts a local
+  relay and joins the current board as the local user.
+- To collaborate from another device or app instance, choose
+  `Join Collaboration…` and enter the server host and port.
+- Within a local network, use the host machine’s LAN IP address and port `8765`.
+- Over the internet, run the host on a machine with a publicly reachable IP and
+  open TCP port `8765`, then forward that port to the host. The joining client
+  uses the host’s public IP address and port `8765`.
+
+The host is responsible for running the relay; there is no cloud relay or hosted
+service. No accounts or authentication are used, so the relay is intended for
+trusted local or private-network use.
+
+### Stopping a session
+
+Choose `Stop Collaboration` to leave the active session. The local relay stops,
+the status returns to `Offline`, and the board returns to local-only operation.
+
 ## Board files
 
 Boards use the `.canvasity` extension and are human-readable JSON:
@@ -108,13 +143,14 @@ canvasity/
   config.py              constants, defaults, paths
   theme.py               light/dark palettes and stylesheet
   canvas/                scene, view, undo commands
+  network/               local TCP collaboration relay and client
   objects/               board items, checklists, project graphs, inline editors
   tools/                 one class per tool
   storage/               atomic JSON load/save and autosave helpers
   export/                PNG and PDF rendering
   ui/                    main window, properties panel, icon factory
   assets/icons/          application logo and generated icon resources
-tests/                   headless core, tool, storage, and export tests
+tests/                   headless core, tool, storage, export, and collaboration tests
 ```
 
 The canvas layer (`canvas/`, `objects/`, `tools/`, `storage/`) does not depend
@@ -144,5 +180,7 @@ QT_QPA_PLATFORM=offscreen python -m unittest discover -s tests -v
   single-line; long text is elided on the node.
 - Groups move, copy, delete, and reorder as a unit; resizing is done per item.
 - Renaming a board changes its display name inside the file, not the filename.
+- Live collaboration uses self-hosted TCP relays and full board snapshots; cross-device
+  use requires the host’s IP address and port forwarding, not a cloud service.
 - When switching themes, items that still use the previous theme's default
   text/stroke colour are updated so they remain readable.

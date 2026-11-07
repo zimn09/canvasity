@@ -7,12 +7,13 @@ import re
 from pathlib import Path
 from typing import Any, Callable
 
-from PySide6.QtCore import QSettings, QSize, Qt, QTimer
-from PySide6.QtGui import QAction, QActionGroup, QColor, QKeySequence
+from PySide6.QtCore import QPointF, QSettings, QSize, Qt, QTimer
+from PySide6.QtGui import QAction, QActionGroup, QColor, QBrush, QPen, QKeySequence
 from PySide6.QtWidgets import (
     QApplication,
     QDockWidget,
     QFileDialog,
+    QGraphicsEllipseItem,
     QInputDialog,
     QLabel,
     QMainWindow,
@@ -32,11 +33,15 @@ from ..config import (
     APP_VERSION,
     AUTOSAVE_INTERVAL_MS,
     BOARD_EXTENSION,
+    COLLABORATION_HOST,
+    COLLABORATION_LOCAL_HOST,
+    COLLABORATION_PORT,
     DEFAULT_STROKE,
     default_board_name,
     app_data_dir,
 )
 from ..export import ExportError, export_pdf, export_png
+from ..network import CollaborationClient, CollaborationServer
 from ..objects import LineItem, ShapeItem, StrokeItem, TextItem
 from ..storage import (
     BoardIOError,
@@ -84,6 +89,14 @@ class CanvasityWindow(QMainWindow):
         self._recovery_checked = False
         self._action_icons: dict[QAction, str] = {}
         self._button_icons: list[tuple[QToolButton, str]] = []
+        self.collaboration_server: CollaborationServer | None = None
+        self.collaboration_client: CollaborationClient | None = None
+        self._collaboration_active = False
+        self._applying_remote_board = False
+        self._local_user_id = "local"
+        self._local_user_name = "You"
+        self._local_user_color = "#38bdf8"
+        self._remote_cursors: dict[str, QGraphicsEllipseItem] = {}
 
         self.scene = BoardScene(self)
         self.view = BoardView(self.scene, self)
@@ -242,6 +255,28 @@ class CanvasityWindow(QMainWindow):
             "Toggle dark mode", "moon", "Ctrl+Shift+T", self.toggle_theme
         )
         self.about_action = self._make_action("About Canvasity", None, None, self._about)
+        self.start_collaboration_action = self._make_action(
+            "Start Collaboration Server",
+            None,
+            None,
+            self.start_collaboration_server,
+            tooltip="Start a local collaboration server and join your own board",
+        )
+        self.join_collaboration_action = self._make_action(
+            "Join Collaboration…",
+            None,
+            None,
+            self.join_collaboration,
+            tooltip="Join a running Canvasity collaboration server",
+        )
+        self.stop_collaboration_action = self._make_action(
+            "Stop Collaboration",
+            None,
+            None,
+            self.stop_collaboration,
+            tooltip="Leave the active collaboration session",
+        )
+        self.stop_collaboration_action.setEnabled(False)
 
         self._editing_actions = [
             self.cut_action,
@@ -308,6 +343,10 @@ class CanvasityWindow(QMainWindow):
         view_menu.addSeparator()
         view_menu.addAction(self.grid_action)
         view_menu.addAction(self.theme_action)
+        view_menu.addSeparator()
+        view_menu.addAction(self.start_collaboration_action)
+        view_menu.addAction(self.join_collaboration_action)
+        view_menu.addAction(self.stop_collaboration_action)
 
         help_menu = menu.addMenu("&Help")
         help_menu.addAction(self.about_action)
@@ -430,6 +469,8 @@ class CanvasityWindow(QMainWindow):
     def _build_status_bar(self) -> None:
         bar = QStatusBar(self)
         self.setStatusBar(bar)
+        self.collaboration_label = QLabel("Offline", bar)
+        bar.addWidget(self.collaboration_label)
         self.selection_label = QLabel("No selection", bar)
         bar.addWidget(self.selection_label)
         self.hint_label = QLabel(self.view.tool_hint, bar)
@@ -478,12 +519,14 @@ class CanvasityWindow(QMainWindow):
         self.scene.undo_stack.canUndoChanged.connect(self._sync_undo_actions)
         self.scene.undo_stack.canRedoChanged.connect(self._sync_undo_actions)
         self.scene.undo_stack.indexChanged.connect(self._on_history_changed)
+        self.view.cursor_moved.connect(self._on_view_cursor_moved)
         self.panel.grid_check.toggled.connect(self.grid_action.setChecked)
         self.grid_action.toggled.connect(self.panel.grid_check.setChecked)
 
     def _on_history_changed(self, _index: int) -> None:
         self.panel.sync_from_selection()
         self._update_status()
+        self._send_board_if_active()
 
     def _apply_theme(self, palette: Palette) -> None:
         previous = getattr(self, "_current_palette", None)
@@ -545,6 +588,160 @@ class CanvasityWindow(QMainWindow):
 
     def _toggle_grid(self) -> None:
         self.view.set_grid_visible(self.grid_action.isChecked())
+
+    # ------------------------------------------------------------------ collaboration
+    def _send_board_if_active(self) -> None:
+        if not self._collaboration_active or self.collaboration_client is None:
+            return
+        if self._applying_remote_board:
+            return
+        try:
+            self.collaboration_client.send_board(self.scene.to_board_dict())
+        except Exception as exc:  # pragma: no cover - defensive UI guard
+            logger.warning("Collaboration board send failed: %s", exc)
+            self._on_collaboration_error(f"Failed to send board update: {exc}")
+
+    def _on_board_received(self, board: dict[str, Any]) -> None:
+        if not self._collaboration_active:
+            return
+        self._applying_remote_board = True
+        try:
+            self.scene.load_board_dict(board)
+        except ValueError as exc:
+            logger.warning("Collaboration board rejected: %s", exc)
+            self._show_warning(str(exc))
+        finally:
+            self._applying_remote_board = False
+        self._clear_remote_cursors()
+        self._update_title()
+        self._update_status()
+        self._update_collaboration_status()
+
+    def _on_collaboration_cursor(self, message: dict[str, Any]) -> None:
+        if not self._collaboration_active:
+            return
+        user = message.get("user") or {}
+        user_id = str(user.get("id") or "guest")
+        x = float(message.get("x") or 0.0)
+        y = float(message.get("y") or 0.0)
+        item = self._remote_cursors.get(user_id)
+        if item is None:
+            item = QGraphicsEllipseItem(0.0, 0.0, 8.0, 8.0)
+            color = QColor(str(user.get("color") or "#94a3b8"))
+            item.setBrush(QBrush(color))
+            item.setPen(QPen(color, 2.0))
+            item.setZValue(10000.0)
+            self.scene.addItem(item)
+            self._remote_cursors[user_id] = item
+        item.setPos(QPointF(x - 4.0, y - 4.0))
+        item.setToolTip(str(user.get("name") or user_id))
+
+    def _on_view_cursor_moved(self, pos: QPointF) -> None:
+        if not self._collaboration_active or self.collaboration_client is None:
+            return
+        self.collaboration_client.send_cursor(
+            pos.x(),
+            pos.y(),
+            {
+                "id": self._local_user_id,
+                "name": self._local_user_name,
+                "color": self._local_user_color,
+            },
+        )
+
+    def _on_collaboration_status_changed(self, status: str) -> None:
+        self._update_collaboration_status()
+
+    def _on_collaboration_error(self, message: str) -> None:
+        logger.warning("Collaboration error: %s", message)
+        self._update_collaboration_status()
+
+    def _update_collaboration_status(self) -> None:
+        online = self._collaboration_active and self.collaboration_client is not None
+        self.collaboration_label.setText("Online" if online else "Offline")
+        self.stop_collaboration_action.setEnabled(online)
+
+    def _start_collaboration_client(
+        self,
+        host: str,
+        port: int,
+        user_id: str,
+        user_name: str,
+        color: str,
+        board: dict[str, Any],
+    ) -> None:
+        client = CollaborationClient()
+        client.board_received.connect(self._on_board_received)
+        client.cursor_received.connect(self._on_collaboration_cursor)
+        client.status_changed.connect(self._on_collaboration_status_changed)
+        client.error_occurred.connect(self._on_collaboration_error)
+        client.start(host, port, user_id, user_name, color, board)
+        self.collaboration_client = client
+        self._collaboration_active = True
+        self._update_collaboration_status()
+
+    def start_collaboration_server(self) -> None:
+        self.stop_collaboration()
+        server = CollaborationServer((COLLABORATION_HOST, COLLABORATION_PORT))
+        server.start()
+        self.collaboration_server = server
+        self._start_collaboration_client(
+            COLLABORATION_LOCAL_HOST,
+            server.port,
+            self._local_user_id,
+            self._local_user_name,
+            self._local_user_color,
+            self.scene.to_board_dict(),
+        )
+
+    def join_collaboration(self) -> None:
+        host = QInputDialog.getText(
+            self,
+            "Join collaboration",
+            "Server host (IP or hostname):",
+            text=COLLABORATION_LOCAL_HOST,
+        )
+        if not host:
+            return
+        port_text = QInputDialog.getText(
+            self,
+            "Join collaboration",
+            "Server port:",
+            text=str(COLLABATION_PORT),
+        )
+        try:
+            port = int(port_text or str(COLLABORATION_PORT))
+        except ValueError:
+            self._show_warning("Collaboration server port must be a number.")
+            return
+        name = QInputDialog.getText(
+            self,
+            "Join collaboration",
+            "Your name:",
+            text="Guest",
+        )
+        user_id = f"guest-{id(self):x}"
+        color = "#f59e0b"
+        self.stop_collaboration()
+        self._start_collaboration_client(host, port, user_id, name, color, self.scene.to_board_dict())
+
+    def stop_collaboration(self) -> None:
+        client = self.collaboration_client
+        self.collaboration_client = None
+        self._collaboration_active = False
+        if client is not None:
+            client.stop()
+        server = self.collaboration_server
+        self.collaboration_server = None
+        if server is not None:
+            server.stop()
+        self._clear_remote_cursors()
+        self._update_collaboration_status()
+
+    def _clear_remote_cursors(self) -> None:
+        for item in list(self._remote_cursors.values()):
+            self.scene.removeItem(item)
+        self._remote_cursors.clear()
 
     # ------------------------------------------------------------------ status
     def _update_zoom(self, scale: float) -> None:
@@ -608,6 +805,7 @@ class CanvasityWindow(QMainWindow):
     def new_board(self) -> None:
         if not self._maybe_save():
             return
+        self.stop_collaboration()
         self.scene.new_board()
         self._path = None
         self._name = default_board_name()
@@ -635,6 +833,7 @@ class CanvasityWindow(QMainWindow):
     def open_path(self, path: str | Path, confirm_save: bool = True) -> None:
         if confirm_save and not self._maybe_save():
             return
+        self.stop_collaboration()
         source = Path(path)
         if not source.exists():
             self._show_error(f"Board not found: {source}")
@@ -859,6 +1058,7 @@ class CanvasityWindow(QMainWindow):
             self.restoreGeometry(geometry)
 
     def closeEvent(self, event: Any) -> None:
+        self.stop_collaboration()
         if not self._maybe_save():
             event.ignore()
             return
