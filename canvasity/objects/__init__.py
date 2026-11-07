@@ -8,6 +8,7 @@ from PySide6.QtCore import QPointF
 
 from ..config import DEFAULT_FILL, DEFAULT_STROKE, DEFAULT_TEXT
 from .base import BoardItem
+from .checklist_item import ChecklistItem
 from .image_item import ImageItem, decode_image
 from .shape_item import ArrowItem, EllipseItem, LineItem, RectItem, ShapeItem
 from .sticky_item import StickyItem
@@ -21,6 +22,7 @@ ITEM_TYPES: dict[str, type[BoardItem]] = {
     "arrow": ArrowItem,
     "sticky": StickyItem,
     "text": TextItem,
+    "checklist": ChecklistItem,
     "stroke": StrokeItem,
     "image": ImageItem,
 }
@@ -82,6 +84,15 @@ def item_from_dict(data: dict[str, Any]) -> BoardItem:
             bool(data.get("underline", False)),
             data.get("alignment", "left"),
         )
+    elif kind == "checklist":
+        item = ChecklistItem(
+            width,
+            data.get("title", "To-do"),
+            data.get("tasks", []),
+            data.get("fill", DEFAULT_FILL),
+            data.get("text_color", DEFAULT_TEXT),
+            float(data.get("font_size", 14.0)),
+        )
     elif kind == "stroke":
         points = [tuple(float(v) for v in p) for p in data.get("points", [])]
         item = StrokeItem(
@@ -115,6 +126,7 @@ __all__ = [
     "ArrowItem",
     "StickyItem",
     "TextItem",
+    "ChecklistItem",
     "StrokeItem",
     "ImageItem",
     "ITEM_TYPES",

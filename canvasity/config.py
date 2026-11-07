@@ -8,7 +8,7 @@ from PySide6.QtCore import QStandardPaths
 
 APP_NAME = "Canvasity"
 APP_ORG = "Canvasity"
-APP_VERSION = "0.1.0"
+APP_VERSION = "0.2.0"
 
 BOARD_EXTENSION = ".canvasity"
 BOARD_FORMAT = "canvasity"

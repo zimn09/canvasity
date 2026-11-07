@@ -29,6 +29,11 @@ PATHS: dict[str, str] = {
     ),
     "sticky": '<path d="M5 4h14v10l-5 5H5V4Z"/><path d="M19 14h-5v5"/>',
     "text": '<path d="M5 6V4h14v2"/><path d="M12 4v16"/><path d="M9 20h6"/>',
+    "checklist": (
+        '<rect x="4.5" y="3.5" width="15" height="17" rx="2"/>'
+        '<path d="m7.5 9 1.6 1.6L12 7.8"/><path d="M14.5 9.5h2.5"/>'
+        '<path d="m7.5 15 1.6 1.6L12 13.8"/><path d="M14.5 15.5h2.5"/>'
+    ),
     "rect": '<rect x="4" y="5" width="16" height="14" rx="1.5"/>',
     "ellipse": '<ellipse cx="12" cy="12" rx="8" ry="7"/>',
     "line": (

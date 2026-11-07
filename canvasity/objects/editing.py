@@ -28,3 +28,14 @@ class InlineTextEditor(QGraphicsTextItem):
             event.accept()
             return
         super().keyPressEvent(event)
+
+
+class InlineLineEditor(InlineTextEditor):
+    """A single-line inline editor; Enter commits instead of adding a newline."""
+
+    def keyPressEvent(self, event: Any) -> None:
+        if event.key() in (Qt.Key.Key_Return, Qt.Key.Key_Enter):
+            self.clearFocus()
+            event.accept()
+            return
+        super().keyPressEvent(event)

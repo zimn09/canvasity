@@ -59,6 +59,7 @@ TOOL_SPECS = [
     ("eraser", "eraser", "Eraser", "E"),
     ("sticky", "sticky", "Sticky note", "S"),
     ("text", "text", "Text", "T"),
+    ("checklist", "checklist", "To-do checklist", "C"),
     ("rect", "rect", "Rectangle", "R"),
     ("ellipse", "ellipse", "Ellipse", "O"),
     ("line", "line", "Line", "L"),
@@ -396,7 +397,7 @@ class CanvasityWindow(QMainWindow):
             self.tool_actions[name] = action
             self._action_icons[action] = icon_name
             tool_bar.addAction(action)
-            if name in ("eraser", "text", "arrow"):
+            if name in ("eraser", "checklist", "arrow"):
                 tool_bar.addSeparator()
         self.tool_actions["select"].setChecked(True)
 

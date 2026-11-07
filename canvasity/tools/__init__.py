@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import Any
 
 from .base import BaseTool
+from .checklist import ChecklistTool
 from .drawing import EraserTool, PenTool
 from .image_tool import ImageTool
 from .lines import ArrowTool, LineTool
@@ -18,6 +19,7 @@ TOOL_CLASSES: dict[str, type[BaseTool]] = {
     "eraser": EraserTool,
     "sticky": StickyTool,
     "text": TextTool,
+    "checklist": ChecklistTool,
     "rect": RectTool,
     "ellipse": EllipseTool,
     "line": LineTool,

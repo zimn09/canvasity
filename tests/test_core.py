@@ -21,6 +21,7 @@ from canvasity.config import BOARD_FORMAT
 from canvasity.export import export_pdf, export_png
 from canvasity.objects import (
     ArrowItem,
+    ChecklistItem,
     EllipseItem,
     ImageItem,
     LineItem,
@@ -169,6 +170,54 @@ class ToolTests(CanvasTestCase):
         items = self.scene.board_items()
         self.assertEqual(len(items), 1)
         self.assertIsInstance(items[0], StickyItem)
+
+    def test_checklist_tool_adds_toggles_and_removes_tasks(self) -> None:
+        self.view.set_tool("checklist")
+        click(self.view, QPoint(300, 250))
+        items = self.scene.board_items()
+        self.assertEqual(len(items), 1)
+        item = items[0]
+        self.assertIsInstance(item, ChecklistItem)
+        self.assertTrue(item.is_editing())
+        self.assertTrue(self.scene.is_editing())
+
+        self.view.setFocus()
+        QTest.keyClicks(self.view, "Buy milk")
+        QTest.keyClick(self.view, Qt.Key.Key_Escape)
+        app().processEvents()
+        self.assertEqual(item.total_count, 1)
+        self.assertEqual(item.tasks[0]["text"], "Buy milk")
+        self.assertEqual(item.done_count, 0)
+
+        checkbox = viewport_point(
+            self.view, item.mapToScene(item._checkbox_rect(0).center())
+        )
+        click(self.view, checkbox)
+        app().processEvents()
+        self.assertTrue(item.tasks[0]["done"])
+        self.assertEqual(item.done_count, 1)
+        self.scene.undo_stack.undo()
+        self.assertFalse(item.tasks[0]["done"])
+
+        add = viewport_point(self.view, item.mapToScene(item._add_rect().center()))
+        click(self.view, add)
+        app().processEvents()
+        self.assertTrue(item.is_editing())
+        self.view.setFocus()
+        QTest.keyClicks(self.view, "Ship it")
+        QTest.keyClick(self.view, Qt.Key.Key_Escape)
+        app().processEvents()
+        self.assertEqual(item.total_count, 2)
+        self.assertEqual(item.tasks[1]["text"], "Ship it")
+
+        delete = viewport_point(
+            self.view, item.mapToScene(item._delete_rect(1).center())
+        )
+        click(self.view, delete)
+        app().processEvents()
+        self.assertEqual(item.total_count, 1)
+        self.scene.undo_stack.undo()
+        self.assertEqual(item.total_count, 2)
 
 
 class ManipulationTests(CanvasTestCase):
@@ -336,20 +385,62 @@ class SerializationTests(CanvasTestCase):
         image = ImageItem(pixmap, 40, 30)
         image.setPos(600, 300)
         self.scene.add_items([image])
+        checklist = ChecklistItem(
+            320,
+            "Launch",
+            [
+                {"text": "Write copy", "done": True},
+                {"text": "Publish", "done": False},
+            ],
+        )
+        checklist.setPos(800, 300)
+        self.scene.add_items([checklist])
 
     def test_round_trip_all_types(self) -> None:
         self._populate()
         data = self.scene.to_board_dict()
         self.assertEqual(data["format"], BOARD_FORMAT)
-        self.assertEqual(len(data["items"]), 7)
+        self.assertEqual(len(data["items"]), 8)
         self.scene.new_board()
         self.assertEqual(len(self.scene.board_items()), 0)
         self.scene.load_board_dict(data)
-        self.assertEqual(len(self.scene.board_items()), 7)
+        self.assertEqual(len(self.scene.board_items()), 8)
         types = sorted(item.TYPE for item in self.scene.board_items())
         self.assertEqual(
-            sorted(types), sorted(["arrow", "image", "line", "rect", "sticky", "stroke", "text"])
+            sorted(types),
+            sorted(
+                [
+                    "arrow",
+                    "checklist",
+                    "image",
+                    "line",
+                    "rect",
+                    "sticky",
+                    "stroke",
+                    "text",
+                ]
+            ),
         )
+
+    def test_checklist_round_trip(self) -> None:
+        item = ChecklistItem(
+            280,
+            "Errands",
+            [
+                {"text": "Milk", "done": True},
+                {"text": "Bread", "done": False},
+            ],
+            "#ffffff",
+            "#0f172a",
+            15,
+        )
+        clone = item_from_dict(item.to_dict())
+        self.assertIsInstance(clone, ChecklistItem)
+        self.assertEqual(clone.title, "Errands")
+        self.assertEqual(clone.total_count, 2)
+        self.assertEqual(clone.done_count, 1)
+        self.assertEqual(clone.tasks[0]["text"], "Milk")
+        self.assertTrue(clone.tasks[0]["done"])
 
     def test_item_dict_round_trip(self) -> None:
         rect = RectItem(90, 60, "#ff0000", "#00ff00", 4)

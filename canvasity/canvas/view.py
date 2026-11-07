@@ -18,7 +18,7 @@ from ..config import (
     MIN_ZOOM,
     ZOOM_STEP,
 )
-from ..objects import ImageItem, StickyItem, TextItem
+from ..objects import ChecklistItem, ImageItem, StickyItem, TextItem
 from ..theme import LIGHT, Palette
 from ..tools import TOOL_CLASSES, BaseTool, create_tool
 from .scene import BoardScene
@@ -35,6 +35,7 @@ class BoardView(QGraphicsView):
         Qt.Key.Key_E: "eraser",
         Qt.Key.Key_S: "sticky",
         Qt.Key.Key_T: "text",
+        Qt.Key.Key_C: "checklist",
         Qt.Key.Key_R: "rect",
         Qt.Key.Key_O: "ellipse",
         Qt.Key.Key_L: "line",
@@ -334,7 +335,9 @@ class BoardView(QGraphicsView):
 
         if key in (Qt.Key.Key_Return, Qt.Key.Key_Enter):
             selected = self.board_scene.selected_board_items()
-            if len(selected) == 1 and isinstance(selected[0], (TextItem, StickyItem)):
+            if len(selected) == 1 and isinstance(
+                selected[0], (TextItem, StickyItem, ChecklistItem)
+            ):
                 selected[0].begin_edit()
                 event.accept()
                 return
