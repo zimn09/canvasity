@@ -20,6 +20,7 @@ from PySide6.QtWidgets import (
     QMessageBox,
     QSizePolicy,
     QStatusBar,
+    QTabWidget,
     QToolBar,
     QToolButton,
     QWidget,
@@ -55,6 +56,7 @@ from ..storage import (
 from ..theme import Palette, ThemeManager
 from .icons import app_icon, icon
 from .properties_panel import PropertiesPanel
+from .settings_panel import SettingsPanel
 
 logger = logging.getLogger(__name__)
 
@@ -105,7 +107,16 @@ class CanvasityWindow(QMainWindow):
         self.setMinimumSize(960, 640)
         self.setWindowIcon(app_icon())
 
-        self.panel = PropertiesPanel(self.scene, self.view, self)
+        self.panel = PropertiesPanel(self.scene, self)
+        self.settings_panel = SettingsPanel(
+            self.scene,
+            self.view,
+            self.theme.name,
+            self._set_theme,
+            self._collaboration_port,
+            self._set_collaboration_port,
+            self,
+        )
         self._build_actions()
         self._build_menus()
         self._build_toolbars()
@@ -277,6 +288,13 @@ class CanvasityWindow(QMainWindow):
             tooltip="Leave the active collaboration session",
         )
         self.stop_collaboration_action.setEnabled(False)
+        self.settings_action = self._make_action(
+            "Settings…",
+            None,
+            None,
+            self._show_settings,
+            tooltip="Open application settings",
+        )
 
         self._editing_actions = [
             self.cut_action,
@@ -344,6 +362,7 @@ class CanvasityWindow(QMainWindow):
         view_menu.addAction(self.grid_action)
         view_menu.addAction(self.theme_action)
         view_menu.addSeparator()
+        view_menu.addAction(self.settings_action)
         view_menu.addAction(self.start_collaboration_action)
         view_menu.addAction(self.join_collaboration_action)
         view_menu.addAction(self.stop_collaboration_action)
@@ -442,8 +461,8 @@ class CanvasityWindow(QMainWindow):
         self.tool_actions["select"].setChecked(True)
 
     def _build_dock(self) -> None:
-        self.dock = QDockWidget("Properties", self)
-        self.dock.setObjectName("PropertiesDock")
+        self.dock = QDockWidget("Inspector", self)
+        self.dock.setObjectName("InspectorDock")
         self.dock.setAllowedAreas(
             Qt.DockWidgetArea.RightDockWidgetArea | Qt.DockWidgetArea.LeftDockWidgetArea
         )
@@ -451,7 +470,11 @@ class CanvasityWindow(QMainWindow):
             QDockWidget.DockWidgetFeature.DockWidgetMovable
             | QDockWidget.DockWidgetFeature.DockWidgetClosable
         )
-        self.dock.setWidget(self.panel)
+        self.tabs = QTabWidget()
+        self.tabs.setObjectName("InspectorTabs")
+        self.tabs.addTab(self.panel, "Properties")
+        self.tabs.addTab(self.settings_panel, "Settings")
+        self.dock.setWidget(self.tabs)
         self.dock.setMinimumWidth(280)
         self.addDockWidget(Qt.DockWidgetArea.RightDockWidgetArea, self.dock)
         view_menu = next(
@@ -520,8 +543,8 @@ class CanvasityWindow(QMainWindow):
         self.scene.undo_stack.canRedoChanged.connect(self._sync_undo_actions)
         self.scene.undo_stack.indexChanged.connect(self._on_history_changed)
         self.view.cursor_moved.connect(self._on_view_cursor_moved)
-        self.panel.grid_check.toggled.connect(self.grid_action.setChecked)
-        self.grid_action.toggled.connect(self.panel.grid_check.setChecked)
+        self.settings_panel.grid_check.toggled.connect(self.grid_action.setChecked)
+        self.grid_action.toggled.connect(self.settings_panel.grid_check.setChecked)
 
     def _on_history_changed(self, _index: int) -> None:
         self.panel.sync_from_selection()
@@ -556,13 +579,17 @@ class CanvasityWindow(QMainWindow):
         self.scene.defaults["text_color"] = palette.text
         self.scene.defaults["stroke"] = palette.text
         self.scene.defaults["pen_color"] = palette.text
-        self.panel.refresh_defaults()
+        self.settings_panel.set_theme_name(palette.name)
+        self.settings_panel.refresh_defaults()
         self.scene.update_handle_scale()
         self.view.viewport().update()
 
-    def toggle_theme(self) -> None:
-        name = self.theme.toggle()
+    def _set_theme(self, name: str) -> None:
+        self.theme.apply(name)
         self.settings.setValue("theme", name)
+
+    def toggle_theme(self) -> None:
+        self._set_theme("dark" if self.theme.name == "light" else "light")
 
     def _adapt_item_colors(self, previous: Palette, current: Palette) -> None:
         """Keep default-coloured content readable when the board changes theme."""
@@ -661,6 +688,26 @@ class CanvasityWindow(QMainWindow):
         self.collaboration_label.setText("Online" if online else "Offline")
         self.stop_collaboration_action.setEnabled(online)
 
+    @property
+    def _collaboration_port(self) -> int:
+        """Return the persisted collaboration server port."""
+        try:
+            port = int(self.settings.value("collaboration_port", COLLABORATION_PORT))
+        except (TypeError, ValueError):
+            port = COLLABORATION_PORT
+        return port if 1 <= port <= 65535 else COLLABORATION_PORT
+
+    def _set_collaboration_port(self, port: int) -> None:
+        self.settings.setValue("collaboration_port", port)
+        self.statusBar().showMessage(
+            f"Collaboration port set to {port} for the next session", 3000
+        )
+
+    def _show_settings(self) -> None:
+        self.dock.show()
+        self.dock.raise_()
+        self.tabs.setCurrentWidget(self.settings_panel)
+
     def _start_collaboration_client(
         self,
         host: str,
@@ -682,48 +729,69 @@ class CanvasityWindow(QMainWindow):
 
     def start_collaboration_server(self) -> None:
         self.stop_collaboration()
-        server = CollaborationServer((COLLABORATION_HOST, COLLABORATION_PORT))
-        server.start()
-        self.collaboration_server = server
-        self._start_collaboration_client(
-            COLLABORATION_LOCAL_HOST,
-            server.port,
-            self._local_user_id,
-            self._local_user_name,
-            self._local_user_color,
-            self.scene.to_board_dict(),
-        )
+        port = self._collaboration_port
+        try:
+            server = CollaborationServer((COLLABORATION_HOST, port))
+            server.start()
+            self.collaboration_server = server
+            self._start_collaboration_client(
+                COLLABORATION_LOCAL_HOST,
+                port,
+                self._local_user_id,
+                self._local_user_name,
+                self._local_user_color,
+                self.scene.to_board_dict(),
+            )
+        except Exception as exc:
+            self.stop_collaboration()
+            self._show_warning(f"Could not start collaboration server on port {port}: {exc}")
 
     def join_collaboration(self) -> None:
-        host = QInputDialog.getText(
+        host, ok = QInputDialog.getText(
             self,
             "Join collaboration",
             "Server host (IP or hostname):",
             text=COLLABORATION_LOCAL_HOST,
         )
-        if not host:
+        if not ok or not host.strip():
             return
-        port_text = QInputDialog.getText(
+        host = host.strip()
+        port = self._collaboration_port
+        port_text, ok = QInputDialog.getText(
             self,
             "Join collaboration",
             "Server port:",
-            text=str(COLLABATION_PORT),
+            text=str(port),
         )
+        if not ok:
+            return
         try:
-            port = int(port_text or str(COLLABORATION_PORT))
-        except ValueError:
+            port = int(port_text or str(port))
+        except (TypeError, ValueError):
             self._show_warning("Collaboration server port must be a number.")
             return
-        name = QInputDialog.getText(
+        if not 1 <= port <= 65535:
+            self._show_warning("Collaboration server port must be between 1 and 65535.")
+            return
+        name, ok = QInputDialog.getText(
             self,
             "Join collaboration",
             "Your name:",
             text="Guest",
         )
+        if not ok:
+            return
+        name = name.strip() or "Guest"
         user_id = f"guest-{id(self):x}"
         color = "#f59e0b"
         self.stop_collaboration()
-        self._start_collaboration_client(host, port, user_id, name, color, self.scene.to_board_dict())
+        try:
+            self._start_collaboration_client(
+                host, port, user_id, name, color, self.scene.to_board_dict()
+            )
+        except Exception as exc:
+            self.stop_collaboration()
+            self._show_warning(f"Could not join collaboration at {host}:{port}: {exc}")
 
     def stop_collaboration(self) -> None:
         client = self.collaboration_client
@@ -1064,5 +1132,6 @@ class CanvasityWindow(QMainWindow):
             return
         self.settings.setValue("geometry", self.saveGeometry())
         self.settings.setValue("theme", self.theme.name)
+        self.settings.setValue("collaboration_port", self._collaboration_port)
         remove_quietly(recovery_path(app_data_dir()))
         event.accept()

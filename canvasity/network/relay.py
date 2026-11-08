@@ -10,7 +10,7 @@ from typing import Any
 
 from PySide6.QtCore import QObject, Signal
 
-from ..config import BOARD_FORMAT, BOARD_VERSION
+from ..config import BOARD_FORMAT, BOARD_VERSION, COLLABORATION_PORT
 
 
 class CollaborationServer(socketserver.ThreadingTCPServer):
@@ -177,7 +177,7 @@ class CollaborationClient(QObject):
         self._stopping = False
         self._ready = threading.Event()
         self._host = "127.0.0.1"
-        self._port = 8765
+        self._port = COLLABORATION_PORT
         self._user_id = "local"
         self._user_name = "You"
         self._user_color = "#38bdf8"

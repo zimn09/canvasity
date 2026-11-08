@@ -27,8 +27,9 @@ TCP relay, so no hosted multiplayer service is involved.
   crash recovery, and PNG/PDF export.
 - Live collaboration over a local TCP relay: start or join a session, see
   remote cursors, and sync board updates.
-- Light and dark themes, plus a top toolbar, left tool palette, contextual
-  properties panel, and zoom/selection status bar.
+- Light and dark themes, plus a top toolbar, left tool palette, tabbed inspector
+  with contextual properties and a Settings tab, and a zoom/selection status
+  bar.
 
 ## Requirements
 
@@ -84,7 +85,8 @@ apply to the editor instead of the canvas.
 ## Live collaboration
 
 Canvasity supports live collaboration without a hosted relay. The local relay
-listens on `0.0.0.0:8765` and exchanges newline-delimited JSON messages:
+listens on `0.0.0.0` on a configurable port (default `5566`) and exchanges
+newline-delimited JSON messages:
 
 - `hello` carries the joining client’s user details and board snapshot.
 - `board` carries a full board snapshot from one client to the others.
@@ -97,12 +99,16 @@ still allowing every participant to add to or modify the shared board.
 
 - Start the collaboration server from the `View` menu. The app starts a local
   relay and joins the current board as the local user.
+- Open the **Settings** tab in the right-hand inspector, or choose
+  `View → Settings…`, to change the server port. The chosen port is saved and
+  used for both hosting and joining by default.
 - To collaborate from another device or app instance, choose
   `Join Collaboration…` and enter the server host and port.
-- Within a local network, use the host machine’s LAN IP address and port `8765`.
+- Within a local network, use the host machine’s LAN IP address and the
+  configured port.
 - Over the internet, run the host on a machine with a publicly reachable IP and
-  open TCP port `8765`, then forward that port to the host. The joining client
-  uses the host’s public IP address and port `8765`.
+  open the configured TCP port, then forward that port to the host. The joining
+  client uses the host’s public IP address and the configured port.
 
 The host is responsible for running the relay; there is no cloud relay or hosted
 service. No accounts or authentication are used, so the relay is intended for

@@ -157,6 +157,28 @@ QDockWidget::title {
     font-weight: 600;
 }
 
+QTabWidget::pane {
+    border: none;
+    background: $panel;
+}
+QTabBar {
+    background: $panel;
+}
+QTabBar::tab {
+    background: transparent;
+    color: $muted;
+    padding: 8px 14px;
+    border: none;
+    border-bottom: 2px solid transparent;
+}
+QTabBar::tab:selected {
+    color: $text;
+    border-bottom-color: $accent;
+}
+QTabBar::tab:hover {
+    background: $hover;
+}
+
 QGroupBox {
     border: 1px solid $border;
     border-radius: 8px;

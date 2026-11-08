@@ -8,7 +8,6 @@ from PySide6.QtCore import QSize, Qt, Signal
 from PySide6.QtGui import QColor
 from PySide6.QtWidgets import (
     QButtonGroup,
-    QCheckBox,
     QColorDialog,
     QFrame,
     QGroupBox,
@@ -23,7 +22,6 @@ from PySide6.QtWidgets import (
 )
 
 from ..canvas.scene import BoardScene
-from ..canvas.view import BoardView
 from ..objects import BoardItem, TextItem
 from ..theme import LIGHT, Palette
 from .icons import icon
@@ -72,10 +70,9 @@ class ColorButton(QToolButton):
 
 
 class PropertiesPanel(QWidget):
-    def __init__(self, scene: BoardScene, view: BoardView, parent: QWidget | None = None) -> None:
+    def __init__(self, scene: BoardScene, parent: QWidget | None = None) -> None:
         super().__init__(parent)
         self.scene = scene
-        self.view = view
         self._palette: Palette = LIGHT
         self._building = False
         self._icon_buttons: list[tuple[QToolButton, str]] = []
@@ -98,7 +95,6 @@ class PropertiesPanel(QWidget):
         self._build_appearance()
         self._build_text()
         self._build_arrange()
-        self._build_canvas()
         self.layout.addStretch(1)
 
         scene.selection_info_changed.connect(self.sync_from_selection)
@@ -316,58 +312,6 @@ class PropertiesPanel(QWidget):
         group_layout.addStretch(1)
         layout.addWidget(group_row)
 
-    def _build_canvas(self) -> None:
-        self.canvas_group, layout = self._new_group("Canvas")
-
-        self.grid_check = QCheckBox("Show grid")
-        self.grid_check.setChecked(self.view.show_grid)
-        self.grid_check.toggled.connect(self.view.set_grid_visible)
-        layout.addWidget(self.grid_check)
-
-        self.snap_check = QCheckBox("Snap to grid")
-        self.snap_check.setChecked(self.scene.grid_snap)
-        self.snap_check.toggled.connect(
-            lambda value: self.scene.set_snapping(grid=value)
-        )
-        layout.addWidget(self.snap_check)
-
-        self.align_check = QCheckBox("Snap to objects")
-        self.align_check.setChecked(self.scene.align_snap)
-        self.align_check.toggled.connect(
-            lambda value: self.scene.set_snapping(align=value)
-        )
-        layout.addWidget(self.align_check)
-
-        self.pen_color_button = ColorButton(alpha=False)
-        self.pen_color_button.set_color(QColor(self.scene.defaults["pen_color"]))
-        self.pen_color_button.color_changed.connect(
-            lambda color: self.scene.defaults.update({"pen_color": color.name()})
-        )
-        layout.addWidget(self._row("Pen", self.pen_color_button))
-
-        self.pen_width_spin = QSpinBox()
-        self.pen_width_spin.setRange(1, 40)
-        self.pen_width_spin.setValue(int(self.scene.defaults["pen_width"]))
-        self.pen_width_spin.setSuffix(" px")
-        self.pen_width_spin.valueChanged.connect(
-            lambda value: self.scene.defaults.update({"pen_width": float(value)})
-        )
-        layout.addWidget(self._row("Pen size", self.pen_width_spin))
-
-        self.default_fill_button = ColorButton(alpha=False)
-        self.default_fill_button.set_color(QColor(self.scene.defaults["fill"]))
-        self.default_fill_button.color_changed.connect(
-            lambda color: self.scene.defaults.update({"fill": color.name()})
-        )
-        layout.addWidget(self._row("New fill", self.default_fill_button))
-
-        self.default_stroke_button = ColorButton(alpha=False)
-        self.default_stroke_button.set_color(QColor(self.scene.defaults["stroke"]))
-        self.default_stroke_button.color_changed.connect(
-            lambda color: self.scene.defaults.update({"stroke": color.name()})
-        )
-        layout.addWidget(self._row("New stroke", self.default_stroke_button))
-
     # ------------------------------------------------------------------ sync
     def sync_from_selection(self) -> None:
         items = self.scene.selected_board_items()
@@ -547,17 +491,6 @@ class PropertiesPanel(QWidget):
         )
 
     # ------------------------------------------------------------------ theme
-    def refresh_defaults(self) -> None:
-        self._building = True
-        try:
-            self.pen_color_button.set_color(QColor(self.scene.defaults["pen_color"]))
-            self.pen_width_spin.setValue(int(self.scene.defaults["pen_width"]))
-            self.default_fill_button.set_color(QColor(self.scene.defaults["fill"]))
-            self.default_stroke_button.set_color(QColor(self.scene.defaults["stroke"]))
-        finally:
-            self._building = False
-        self.sync_from_selection()
-
     def apply_theme(self, palette: Palette) -> None:
         self._palette = palette
         for button, name in self._icon_buttons:
